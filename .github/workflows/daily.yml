@@ -6,21 +6,22 @@ on:
  workflow_dispatch:       # 允许手动触发
 
 jobs:
- run:
-   runs-on: ubuntu-latest
-   env:
-     EMAIL_USER: ${{ secrets.EMAIL_USER }}
-     EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-     EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
-     EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
-     EMAIL_TO:   ${{ secrets.EMAIL_TO }}
-   steps:
-     - uses: actions/checkout@v4
-     - uses: actions/setup-python@v5
-       with:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      EMAIL_USER: ${{ secrets.EMAIL_USER }}
+      EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+      EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+      EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+      EMAIL_TO: ${{ secrets.EMAIL_TO }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
          python-version: '3.12'
          cache: 'pip'
-     - name: Install deps
-       run: pip install -r requirements.txt
-     - name: Run script
-       run: python fetch.py
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Run script
+        run: python fetch.py
