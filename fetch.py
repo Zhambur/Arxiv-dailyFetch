@@ -9,6 +9,7 @@ from typing import List
 
 import requests, feedparser
 from dotenv import load_dotenv
+load_dotenv()
 
 # ---------------------- 全局限速器 ---------------------- #
 _rate_lock = threading.Lock()
@@ -27,46 +28,112 @@ def _rate_limited_get(session: requests.Session, url: str, timeout: int) -> requ
                        headers={"User-Agent": "arxiv-digest/1.0 (personal research tool)"})
 
 
-# ---------------------- AI 摘要（Gemini） ---------------------- #
-_GEMINI_AVAILABLE = False
-_model = None
+# ---------------------- 多 AI 摘要（支持多个提供商自动切换） ---------------------- #
+_ai_provider = None
 
-try:
-    import google.generativeai as genai
-    _api_key = os.getenv("GEMINI_API_KEY")
-    if _api_key:
-        genai.configure(api_key=_api_key)
-        _model = genai.GenerativeModel("gemini-2.0-flash")
-        _GEMINI_AVAILABLE = True
-except ImportError:
-    pass
+
+def _build_providers():
+    """
+    按优先级返回可用的 AI provider。
+    第一个成功的 provider 会被使用，后续的作为兜底。
+    """
+    providers = []
+
+    # 1. 智谱 GLM（GLM-4-Flash，免费额度充足）
+    glm_key = os.getenv("GLM_API_KEY")
+    if glm_key:
+        def glm_summary(title_en, abs_en):
+            payload = {
+                "model": "glm-4-flash",
+                "messages": [
+                    {"role": "system", "content": "你是一位计算机科学领域的学术助手。请严格参照以下论文的摘要，翻译为通顺的中文摘要，不要遗漏任何信息。最后额外说明论文的核心贡献和方法要点，语言流畅专业。"},
+                    {"role": "user", "content": f"标题：{title_en.strip()}\n\n摘要：{abs_en.strip()[:1500]}"}
+                ],
+                "temperature": 0.3,
+            }
+            r = requests.post(
+                "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+                json=payload,
+                headers={"Authorization": f"Bearer {glm_key}", "Content-Type": "application/json"},
+                timeout=30,
+            )
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"].strip()
+
+        providers.append(("GLM (glm-4-flash)", glm_summary))
+
+    # 2. DeepSeek
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+    if deepseek_key:
+        def deepseek_summary(title_en, abs_en):
+            payload = {
+                "model": "deepseek-chat",
+                "messages": [
+                    {"role": "system", "content": "你是一位计算机科学领域的学术助手。请严格参照以下论文的摘要，翻译为通顺的中文摘要，不要遗漏任何信息。最后额外说明论文的核心贡献和方法要点，语言流畅专业。"},
+                    {"role": "user", "content": f"标题：{title_en.strip()}\n\n摘要：{abs_en.strip()[:1500]}"}
+                ],
+                "temperature": 0.3,
+            }
+            r = requests.post(
+                "https://api.deepseek.com/v1/chat/completions",
+                json=payload,
+                headers={"Authorization": f"Bearer {deepseek_key}", "Content-Type": "application/json"},
+                timeout=30,
+            )
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"].strip()
+
+        providers.append(("DeepSeek (deepseek-chat)", deepseek_summary))
+
+    # 3. Gemini（最后兜底）
+    try:
+        from google import genai
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if gemini_key:
+            client = genai.Client(api_key=gemini_key)
+
+            def gemini_summary(title_en, abs_en):
+                prompt = (
+                    "你是一位计算机科学领域的学术助手。请严格参照以下论文的摘要，翻译为通顺的中文摘要，不要遗漏任何信息。"
+                    "最后额外说明论文的核心贡献和方法要点，语言流畅专业。\n\n"
+                    f"标题：{title_en.strip()}\n\n摘要：{abs_en.strip()[:1500]}"
+                )
+                resp = client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=prompt,
+                )
+                return resp.text.strip()
+
+            providers.append(("Gemini (gemini-2.0-flash)", gemini_summary))
+    except ImportError:
+        pass
+
+    return providers
+
+
+_providers = _build_providers()
+if _providers:
+    _ai_provider = _providers[0][0]
+    print(f"[OK] AI 摘要已启用 — 主提供商: {_ai_provider}（共 {len(_providers)} 个可用）")
+else:
+    print("[warn] 未检测到任何 AI API Key，AI 摘要功能已禁用")
 
 
 def _ai_summary(title_en: str, abs_en: str) -> str:
-    """
-    用 Gemini 2.0 Flash 生成一句话中文摘要。
-    API 未配置时直接返回空字符串。
-    """
-    if not _GEMINI_AVAILABLE or not _model:
-        return ""
-    prompt = (
-        "你是一位计算机科学领域的学术助手。请为以下论文生成 3~4 句简洁的中文摘要，"
-        "说明论文的核心贡献和方法要点，语言流畅专业。\n\n"
-        f"标题：{title_en.strip()}\n\n摘要：{abs_en.strip()[:1500]}"
-    )
-    try:
-        resp = _model.generate_content(prompt, request_options={"timeout": 30})
-        return resp.text.strip()
-    except Exception as e:
-        print(f"[warn] Gemini summarize failed: {e}")
-        return ""
+    """遍历所有 provider，返回第一个成功的结果。"""
+    for name, fn in _providers:
+        try:
+            return fn(title_en, abs_en)
+        except Exception as e:
+            print(f"[warn] {name} 摘要失败: {e}")
+    return ""
 
 
 # ----------------------------------------------------------- #
 
 ARXIV_API = (
     "https://export.arxiv.org/api/query"
-    "?search_query={query}&sortBy=submittedDate&sortOrder=descending&max_results=50"
+    "?search_query={query}&sortBy=submittedDate&sortOrder=descending&max_results=10"
 )
 HTTP_TIMEOUT, RETRY, BACKOFF = 60, 5, 20
 
@@ -127,23 +194,25 @@ _META = """
 
 def li_block(idx: int, p: dict) -> str:
     ai_note = (
-        f"<p style='color:#1a7f37; font-weight:600;'>✦ AI 摘要：{html.escape(p['abs_ai'])}</p>"
+        f"<div class='ai-note'>"
+        f"<span class='ai-label'>✦ AI 摘要</span>"
+        f"<span class='ai-text'>{html.escape(p['abs_ai'])}</span>"
+        f"</div>"
         if p['abs_ai'] else ""
     )
     return f"""
 <div class="paper-card">
   <div class="paper-idx">[{idx}]</div>
   <div class="paper-body">
-    <h3 class="paper-title">{html.escape(p['title_en'])}</h3>
+    <h3 class="paper-title">
+      <a href="{p['url']}" target="_blank">{html.escape(p['title_en'])}</a>
+    </h3>
     {ai_note}
     <p class="paper-meta">
       <span class="label">作者：</span>{html.escape(p['authors'])}
     </p>
-    <p class="paper-meta">
-      <span class="label">摘要：</span>{html.escape(p['abs_en'][:400])}{'…' if len(p['abs_en']) > 400 else ''}
-    </p>
-    <p class="paper-link">
-      <a href="{p['url']}" target="_blank">arXiv 链接 →</a>
+    <p class="paper-meta abs-full">
+      <span class="label">摘要：</span>{html.escape(p['abs_en'])}
     </p>
   </div>
 </div>"""
@@ -162,9 +231,9 @@ def section_html(code: str, cname: str, papers: List[dict]) -> str:
     return header + f"<div class='paper-list'>{body}</div>"
 
 
-def build_email(cg, gr, pc) -> str:
+def build_email(ro, cl, cv) -> str:
     now_bj = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
-    ai_badge = " · AI 摘要" if _GEMINI_AVAILABLE else ""
+    ai_badge = f" · {_ai_provider}" if _ai_provider else ""
     return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>
@@ -285,12 +354,48 @@ def build_email(cg, gr, pc) -> str:
     margin-bottom: 6px;
     line-height: 1.5;
   }}
+  .paper-title a {{
+    color: #1a1a2e;
+    text-decoration: none;
+  }}
+  .paper-title a:hover {{
+    color: #4a90d9;
+    text-decoration: underline;
+  }}
   .paper-meta {{
     font-size: 13px;
     color: #555;
     margin-bottom: 4px;
   }}
   .label {{
+    font-weight: 600;
+    color: #333;
+  }}
+  .ai-note {{
+    background: #f0f7ff;
+    border-left: 3px solid #1a7f37;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+  }}
+  .ai-label {{
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: #1a7f37;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 3px;
+  }}
+  .ai-text {{
+    font-size: 13px;
+    color: #1a3a1a;
+    line-height: 1.6;
+  }}
+  .paper-meta .abs-full {{
+    white-space: pre-wrap;
+  }}
+  .paper-link a {{
     font-weight: 600;
     color: #333;
   }}
@@ -345,7 +450,7 @@ def build_email(cg, gr, pc) -> str:
   <div class="masthead">
     <h1>arXiv Daily{ai_badge}</h1>
     <div class="subtitle">更新时间：{now_bj} (北京时间)</div>
-    <div class="ai-badge">Gemini 2.0 Flash</div>
+    <div class="ai-badge">{_ai_provider or "Gemini 2.0 Flash"}</div>
   </div>
   {section_html('cs.RO', '机器人学', ro)}
   {section_html('cs.CL', 'NLP / 大模型', cl)}
@@ -382,6 +487,8 @@ def send(html_body: str):
 
 # ---------- 主流程 ------------------------------------------------------ #
 def main():
+    if not _providers:
+        print("[warn] Gemini API 未配置，跳过 AI 摘要（请确认 GEMINI_API_KEY 环境变量已设置）")
     print("[*] Fetching cs.RO (机器人学) …")
     ro = fetch("cat:cs.RO")
     print("[*] Fetching cs.CL (NLP / 大模型) …")
@@ -393,5 +500,4 @@ def main():
 
 
 if __name__ == "__main__":
-    load_dotenv()
     main()

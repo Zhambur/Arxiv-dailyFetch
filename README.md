@@ -65,7 +65,7 @@ python fetch.py
 - `requests` — HTTP 请求
 - `feedparser` — 解析 arXiv Atom Feed
 - `python-dotenv` — 环境变量读取
-- `google-generativeai` — Gemini AI 摘要（可选）
+- `google-genai` — Gemini AI 摘要（可选）
 
 ## 注意事项
 
