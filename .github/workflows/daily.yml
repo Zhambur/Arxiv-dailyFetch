@@ -1,14 +1,15 @@
 name: Arxiv-dailyFetch
 
 on:
- schedule:
-   - cron: '30 0 * * *'    # UTC 00:30 = 北京时间 08:30
- workflow_dispatch:       # 允许手动触发
+  schedule:
+    - cron: '30 0 * * *'    # UTC 00:30 = 北京时间 08:30
+  workflow_dispatch:       # 允许手动触发
 
 jobs:
   run:
     runs-on: ubuntu-latest
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       EMAIL_USER: ${{ secrets.EMAIL_USER }}
       EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
       EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
@@ -17,10 +18,15 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            fetch.py
+            requirements.txt
       - uses: actions/setup-python@v5
         with:
-         python-version: '3.12'
-         cache: 'pip'
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
       - name: Install deps
         run: pip install -r requirements.txt
       - name: Run script

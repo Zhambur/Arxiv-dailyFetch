@@ -50,7 +50,7 @@ def _ai_summary(title_en: str, abs_en: str) -> str:
     if not _GEMINI_AVAILABLE or not _model:
         return ""
     prompt = (
-        "你是一位计算机科学领域的学术助手。请为以下论文生成 1~2 句简洁的中文摘要，"
+        "你是一位计算机科学领域的学术助手。请为以下论文生成 3~4 句简洁的中文摘要，"
         "说明论文的核心贡献和方法要点，语言流畅专业。\n\n"
         f"标题：{title_en.strip()}\n\n摘要：{abs_en.strip()[:1500]}"
     )
