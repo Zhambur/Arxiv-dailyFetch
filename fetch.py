@@ -347,9 +347,9 @@ def build_email(cg, gr, pc) -> str:
     <div class="subtitle">更新时间：{now_bj} (北京时间)</div>
     <div class="ai-badge">Gemini 2.0 Flash</div>
   </div>
-  {section_html('cs.CG', '计算几何', cg)}
-  {section_html('cs.GR', '图形学', gr)}
-  {section_html('Point Cloud', '点云相关', pc)}
+  {section_html('cs.RO', '机器人学', ro)}
+  {section_html('cs.CL', 'NLP / 大模型', cl)}
+  {section_html('cs.CV', '计算机视觉', cv)}
 </div>
 </body>
 </html>"""
@@ -364,7 +364,7 @@ def send(html_body: str):
     to   = [x.strip() for x in os.environ["EMAIL_TO"].split(",")]
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Daily arXiv Digest – CG, Graphics, Point Cloud"
+    msg["Subject"] = "Daily arXiv Digest – Robotics, NLP, Computer Vision"
     msg["From"] = user
     msg["To"] = ", ".join(to)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
@@ -382,14 +382,14 @@ def send(html_body: str):
 
 # ---------- 主流程 ------------------------------------------------------ #
 def main():
-    print("[*] Fetching cs.CG …")
-    cg = fetch("cat:cs.CG")
-    print("[*] Fetching cs.GR …")
-    gr = fetch("cat:cs.GR")
-    print('[*] Fetching "point cloud" …')
-    pc = fetch('ti:"point cloud"+OR+abs:"point cloud"')
+    print("[*] Fetching cs.RO (机器人学) …")
+    ro = fetch("cat:cs.RO")
+    print("[*] Fetching cs.CL (NLP / 大模型) …")
+    cl = fetch("cat:cs.CL")
+    print("[*] Fetching cs.CV (计算机视觉) …")
+    cv = fetch("cat:cs.CV")
 
-    send(build_email(cg, gr, pc))
+    send(build_email(ro, cl, cv))
 
 
 if __name__ == "__main__":
