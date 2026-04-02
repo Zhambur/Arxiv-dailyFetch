@@ -1,0 +1,4 @@
+requests>=2.32
+feedparser>=6.0
+python-dotenv>=1.0
+googletrans>=4.0.0-rc1  
