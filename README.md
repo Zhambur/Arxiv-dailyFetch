@@ -2,17 +2,9 @@
 
 每日自动抓取 arXiv 最新论文，翻译标题与摘要，生成 HTML 邮件推送到你的邮箱。
 
-**GitHub Actions 定时任务**：每天北京时间 08:30 自动运行。
-
 ## 追踪领域
 
-| 分类 | arXiv 标签 | 中文 |
-|------|-----------|------|
-| 机器人学 | `cat:cs.RO` | Robotics |
-| NLP / 大模型 | `cat:cs.CL` | NLP & LLMs |
-| 计算机视觉 | `cat:cs.CV` | Computer Vision |
-
-每领域取最新 10 篇。
+默认设定检索关键词，覆盖**具身智能**、**多模态大模型**、**世界模型 & 规划**、**图像生成 & 理解**、**AI Agent** 五个模块。其中具身智能每批次抓取 20 篇，其余模块各 10 篇。
 
 ## 快速开始
 
@@ -36,9 +28,9 @@ EMAIL_TO=receiver@example.com
 
 # AI 摘要（至少配置一个，不填则跳过 AI 摘要）
 # 优先级：GLM → DeepSeek → Gemini（自动切换，失败时使用下一个）
-GLM_API_KEY=       # https://bigmodel.cn/ 免费申请
-DEEPSEEK_API_KEY=  # https://platform.deepseek.com/ 免费申请
-GEMINI_API_KEY=    # https://aistudio.google.com/apikey（兜底）
+GLM_API_KEY=       # https://bigmodel.cn/ 
+DEEPSEEK_API_KEY=  # https://platform.deepseek.com/ 
+GEMINI_API_KEY=    # https://aistudio.google.com/apikey
 ```
 
 > 邮件配置：QQ 邮箱使用 SSL 端口 465，授权码在「设置 → 账户 → POP3/SMTP」获取。
@@ -64,7 +56,7 @@ python fetch.py
 | `DEEPSEEK_API_KEY` | DeepSeek 密钥（可选） |
 | `GEMINI_API_KEY` | Gemini 密钥（可选，不填则跳过 AI 摘要） |
 
-定时任务在每天 **UTC 00:30（北京时间 08:30）** 自动执行。
+定时任务在每天 **UTC 00:00（北京时间 08:00）** 自动执行，通常存在 2-3 个小时的误差，这是 Actions 自带的发送时间偏差。
 
 ## 依赖
 

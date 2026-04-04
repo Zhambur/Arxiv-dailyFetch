@@ -159,9 +159,10 @@ def _http_get(url: str) -> str:
     raise RuntimeError("Failed after retries")
 
 
-def fetch(query: str, hours: int = 24) -> List[dict]:
+def fetch(query: str, hours: int = 24, max_results: int = 10) -> List[dict]:
     since_utc = datetime.now(timezone.utc) - timedelta(hours=hours)
-    raw = _http_get(ARXIV_API.format(query=query))
+    url = f"https://export.arxiv.org/api/query?search_query={query}&sortBy=submittedDate&sortOrder=descending&max_results={max_results}"
+    raw = _http_get(url)
     feed = feedparser.parse(raw)
     out = []
     for e in feed.entries:
@@ -489,8 +490,6 @@ _MODULES = [
      'all:VLA OR all:"vision language action" OR all:"vision-language-action" OR all:"embodied agent" OR all:"embodied AI" OR all:"physical AI" OR all:"robot manipulation" OR all:"dual-arm" OR all:"bimanual" OR all:dexterous OR all:"whole-body" OR all:"in-hand" OR all:"imitation learning" OR all:"behavior cloning" OR all:dAgger OR all:LfD OR all:"reinforcement learning" OR all:manipulation OR all:"visual navigation" OR all:ObjectNav OR all:"point-goal" OR all:"sim-to-real" OR all:"domain randomization"'),
     ("多模态大模型",
      'all:"multimodal LLM" OR all:"vision language model" OR all:"LVLM" OR all:LLaVA OR all:Vary OR all:Grounding OR all:InternVL OR all:CLIP OR all:BLIP OR all:SigLIP OR all:"LLaMA-Factory" OR all:LoRA OR all:"instruction tuning"'),
-    ("开放词汇感知",
-     'all:"open vocabulary" OR all:"zero-shot detection" OR all:"open-set" OR all:"open vocabulary detection" OR all:"novel category discovery"'),
     ("世界模型 & 规划",
      'all:"world model" OR all:"visual planning" OR all:"task planning" OR all:"motion planning" OR all:reasoning OR all:coarse-to-fine OR all:"video prediction" OR all:"future prediction"'),
     ("图像生成 & 理解",
@@ -505,8 +504,9 @@ def main():
         print("[warn] Gemini API 未配置，跳过 AI 摘要（请确认 GEMINI_API_KEY 环境变量已设置）")
     sections = {}
     for name, query in _MODULES:
-        print(f"[*] Fetching — {name} …")
-        sections[name] = fetch(query)
+        n = 20 if name == "具身智能" else 10
+        print(f"[*] Fetching — {name} (max={n}) …")
+        sections[name] = fetch(query, max_results=n)
 
     send(build_email(sections))
 
