@@ -2,7 +2,7 @@ name: Arxiv-dailyFetch
 
 on:
   schedule:
-    - cron: '30 0 * * *'    # UTC 00:30 = 北京时间 08:30
+    - cron: '0 0 * * *'    # UTC 00:00 = 北京时间 08:00
   workflow_dispatch:       # 允许手动触发
 
 jobs:

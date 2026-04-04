@@ -231,7 +231,7 @@ def section_html(code: str, cname: str, papers: List[dict]) -> str:
     return header + f"<div class='paper-list'>{body}</div>"
 
 
-def build_email(ro, cl, cv) -> str:
+def build_email(sections: dict) -> str:
     now_bj = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
     ai_badge = f" · {_ai_provider}" if _ai_provider else ""
     return f"""<!DOCTYPE html>
@@ -448,13 +448,11 @@ def build_email(ro, cl, cv) -> str:
 <body>
 <div class="container">
   <div class="masthead">
-    <h1>arXiv Daily{ai_badge}</h1>
+    <h1>arXiv Daily · made by Zhambur{ai_badge}</h1>
     <div class="subtitle">更新时间：{now_bj} (北京时间)</div>
     <div class="ai-badge">{_ai_provider or "Gemini 2.0 Flash"}</div>
   </div>
-  {section_html('cs.RO', '机器人学', ro)}
-  {section_html('cs.CL', 'NLP / 大模型', cl)}
-  {section_html('cs.CV', '计算机视觉', cv)}
+  {''.join(section_html(k, k, v) for k, v in sections.items())}
 </div>
 </body>
 </html>"""
@@ -469,7 +467,7 @@ def send(html_body: str):
     to   = [x.strip() for x in os.environ["EMAIL_TO"].split(",")]
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Daily arXiv Digest – Robotics, NLP, Computer Vision"
+    msg["Subject"] = "Daily arXiv Fetch – made by Zhambur · Embodied AI · Multimodal LLM"
     msg["From"] = user
     msg["To"] = ", ".join(to)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
@@ -486,17 +484,31 @@ def send(html_body: str):
 
 
 # ---------- 主流程 ------------------------------------------------------ #
+_MODULES = [
+    ("具身智能",
+     'all:VLA OR all:"vision language action" OR all:"vision-language-action" OR all:"embodied agent" OR all:"embodied AI" OR all:"physical AI" OR all:"robot manipulation" OR all:"dual-arm" OR all:"bimanual" OR all:dexterous OR all:"whole-body" OR all:"in-hand" OR all:"imitation learning" OR all:"behavior cloning" OR all:dAgger OR all:LfD OR all:"reinforcement learning" OR all:manipulation OR all:"visual navigation" OR all:ObjectNav OR all:"point-goal" OR all:"sim-to-real" OR all:"domain randomization"'),
+    ("多模态大模型",
+     'all:"multimodal LLM" OR all:"vision language model" OR all:"LVLM" OR all:LLaVA OR all:Vary OR all:Grounding OR all:InternVL OR all:CLIP OR all:BLIP OR all:SigLIP OR all:"LLaMA-Factory" OR all:LoRA OR all:"instruction tuning"'),
+    ("开放词汇感知",
+     'all:"open vocabulary" OR all:"zero-shot detection" OR all:"open-set" OR all:"open vocabulary detection" OR all:"novel category discovery"'),
+    ("世界模型 & 规划",
+     'all:"world model" OR all:"visual planning" OR all:"task planning" OR all:"motion planning" OR all:reasoning OR all:coarse-to-fine OR all:"video prediction" OR all:"future prediction"'),
+    ("图像生成 & 理解",
+     'all:"diffusion model" OR all:"text-to-image" OR all:"text-to-video" OR all:"image generation" OR all:"visual reasoning" OR all:VQA OR all:"visual question answering" OR all:"image captioning" OR all:"visual program" OR all:"Multimodal OCR" OR all:"document understanding" OR all:"visual chain-of-thought" OR all:GAN OR all:VAE'),
+    ("AI Agent",
+     'all:"multimodal agent" OR all:"visual agent" OR all:"GUI agent" OR all:"web agent" OR all:"tool use" OR all:"tool learning" OR all:"function calling" OR all:RAG OR all:"retrieval-augmented" OR all:"memory agent" OR all:"multi-agent" OR all:"agent collaboration" OR all:"agent swarm" OR all:"autonomous agent" OR all:"interactive agent"'),
+]
+
+
 def main():
     if not _providers:
         print("[warn] Gemini API 未配置，跳过 AI 摘要（请确认 GEMINI_API_KEY 环境变量已设置）")
-    print("[*] Fetching cs.RO (机器人学) …")
-    ro = fetch("cat:cs.RO")
-    print("[*] Fetching cs.CL (NLP / 大模型) …")
-    cl = fetch("cat:cs.CL")
-    print("[*] Fetching cs.CV (计算机视觉) …")
-    cv = fetch("cat:cs.CV")
+    sections = {}
+    for name, query in _MODULES:
+        print(f"[*] Fetching — {name} …")
+        sections[name] = fetch(query)
 
-    send(build_email(ro, cl, cv))
+    send(build_email(sections))
 
 
 if __name__ == "__main__":
