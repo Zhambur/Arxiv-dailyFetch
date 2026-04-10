@@ -485,17 +485,36 @@ def send(html_body: str):
 
 
 # ---------- 主流程 ------------------------------------------------------ #
+# arXiv CS 分类说明：
+#   cs.AI  Artificial Intelligence       — AI Agent、推理、规划、知识图谱
+#   cs.LG  Machine Learning              — 深度学习、强化学习、LLM
+#   cs.CV  Computer Vision                — 图像/视频生成、目标检测、VQA、OCR
+#   cs.RO  Robotics                      — 具身智能、机械臂、导航、sim-to-real
+#   cs.CL  Computation and Language      — NLP、多模态大模型
+#   cs.HC  Human-Computer Interaction    — GUI Agent、Web Agent
+#   cs.MA  Multiagent Systems            — 多智能体系统
+#
+# 关键词前缀说明：
+#   all:    全文检索（最宽）
+#   ti:     限定标题（精准，但可能漏掉一些）
+#   abs:    限定摘要
+#   cat:    限定 arXiv 分类
+
 _MODULES = [
     ("具身智能",
-     'all:VLA OR all:"vision language action" OR all:"vision-language-action" OR all:"embodied agent" OR all:"embodied AI" OR all:"physical AI" OR all:"robot manipulation" OR all:"dual-arm" OR all:"bimanual" OR all:dexterous OR all:"whole-body" OR all:"in-hand" OR all:"imitation learning" OR all:"behavior cloning" OR all:dAgger OR all:LfD OR all:"reinforcement learning" OR all:manipulation OR all:"visual navigation" OR all:ObjectNav OR all:"point-goal" OR all:"sim-to-real" OR all:"domain randomization"'),
+     'cat:cs.RO OR cat:cs.AI AND (all:VLA OR all:"vision language action" OR all:"embodied agent" OR all:"embodied AI" OR all:"physical AI" OR all:"robot manipulation" OR all:"dual-arm" OR all:"bimanual" OR ti:dexterous OR all:"whole-body" OR all:"in-hand manipulation" OR all:"imitation learning" OR all:"behavior cloning" OR all:dAgger OR all:LfD OR all:"reinforcement learning" OR ti:manipulation OR all:"visual navigation" OR all:ObjectNav OR all:"point-goal" OR all:"sim-to-real" OR all:"domain randomization")'),
+
     ("多模态大模型",
-     'all:"multimodal LLM" OR all:"vision language model" OR all:"LVLM" OR all:LLaVA OR all:Vary OR all:Grounding OR all:InternVL OR all:CLIP OR all:BLIP OR all:SigLIP OR all:"LLaMA-Factory" OR all:LoRA OR all:"instruction tuning"'),
+     'cat:cs.CV OR cat:cs.CL OR cat:cs.LG AND (all:"multimodal LLM" OR all:"vision language model" OR ti:LVLM OR all:LLaVA OR all:Vary OR all:Grounding OR all:InternVL OR all:CLIP OR all:BLIP OR all:SigLIP OR all:"LLaMA-Factory" OR all:LoRA OR all:"instruction tuning")'),
+
     ("世界模型 & 规划",
-     'all:"world model" OR all:"visual planning" OR all:"task planning" OR all:"motion planning" OR all:reasoning OR all:coarse-to-fine OR all:"video prediction" OR all:"future prediction"'),
+     'cat:cs.RO OR cat:cs.AI AND (all:"world model" OR all:"visual planning" OR all:"task planning" OR all:"motion planning" OR ti:reasoning OR all:"coarse-to-fine" OR all:"video prediction" OR all:"future prediction")'),
+
     ("图像生成 & 理解",
-     'all:"diffusion model" OR all:"text-to-image" OR all:"text-to-video" OR all:"image generation" OR all:"visual reasoning" OR all:VQA OR all:"visual question answering" OR all:"image captioning" OR all:"visual program" OR all:"Multimodal OCR" OR all:"document understanding" OR all:"visual chain-of-thought" OR all:GAN OR all:VAE'),
+     'cat:cs.CV AND (all:"diffusion model" OR all:"text-to-image" OR all:"text-to-video" OR all:"image generation" OR all:"visual reasoning" OR all:VQA OR all:"visual question answering" OR all:"image captioning" OR all:"visual program" OR all:"Multimodal OCR" OR all:"document understanding" OR all:"visual chain-of-thought" OR all:GAN OR all:VAE)'),
+
     ("AI Agent",
-     'all:"multimodal agent" OR all:"visual agent" OR all:"GUI agent" OR all:"web agent" OR all:"tool use" OR all:"tool learning" OR all:"function calling" OR all:RAG OR all:"retrieval-augmented" OR all:"memory agent" OR all:"multi-agent" OR all:"agent collaboration" OR all:"agent swarm" OR all:"autonomous agent" OR all:"interactive agent"'),
+     'cat:cs.AI OR cat:cs.HC OR cat:cs.MA AND (all:"agent" OR all:"multimodal agent" OR all:"visual agent" OR all:"GUI agent" OR all:"web agent" OR all:"tool use" OR all:"tool learning" OR all:"function calling" OR all:RAG OR all:"retrieval-augmented" OR all:"memory agent" OR all:"multi-agent" OR all:"agent collaboration" OR all:"agent swarm" OR all:"autonomous agent" OR all:"interactive agent")'),
 ]
 
 
