@@ -16,14 +16,16 @@ pip install -r requirements.txt
 
 ### 2. 配置环境变量
 
+> 若没有本地启动脚本（如测试）的需求，可以跳过本步骤，直接在 Actions 中配置 Secrets。若有该需求，在推送至远程仓库时，注意将该文件添加至 `.gitignore` 中，避免泄露隐私信息。
+
 创建 `.env` 文件：
 
 ```env
-# 邮件发送（支持任意 SMTP 服务）
+# 邮件发送（支持 SMTP 服务）
 EMAIL_HOST=smtp.qq.com
 EMAIL_PORT=465
 EMAIL_USER=your_email@example.com
-EMAIL_PASS=your_smtp授权码
+EMAIL_PASS=your_smtp 授权码
 EMAIL_TO=receiver@example.com
 
 # AI 摘要（至少配置一个，不填则跳过 AI 摘要）
@@ -33,7 +35,7 @@ DEEPSEEK_API_KEY=  # https://platform.deepseek.com/
 GEMINI_API_KEY=    # https://aistudio.google.com/apikey
 ```
 
-> 邮件配置：QQ 邮箱使用 SSL 端口 465，授权码在「设置 → 账户 → POP3/SMTP」获取。
+> 邮件配置：记得开启SMTP服务，「设置 → 账户与安全 → 安全设置 → POP3/SMTP」开启并获取授权码；SMTP服务使用 SSL 端口 465。
 
 ### 3. 本地运行
 
@@ -54,9 +56,11 @@ python fetch.py
 | `EMAIL_TO` | 收件人，多个用逗号分隔 |
 | `GLM_API_KEY` | 智谱 GLM 密钥（可选） |
 | `DEEPSEEK_API_KEY` | DeepSeek 密钥（可选） |
-| `GEMINI_API_KEY` | Gemini 密钥（可选，不填则跳过 AI 摘要） |
+| `GEMINI_API_KEY` | Gemini 密钥（可选，apikey都不填则跳过 AI 摘要，呈现原文摘要） |
 
-定时任务在每天 **UTC 00:00（北京时间 08:00）** 自动执行，通常存在 2-3 个小时的误差，这是 Actions 自带的发送时间偏差。
+如有其他apikey需求，请自行在代码中修改，并创建对应的secret。
+
+定时任务在每天 **UTC 00:00（北京时间 08:00）** 自动执行，通常存在 2-3 个小时的误差，这可能是 Actions 自带的发送时间偏差，也可能是SMTP服务的延迟（此处没有深入探讨）。
 
 ## 依赖
 

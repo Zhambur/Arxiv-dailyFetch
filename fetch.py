@@ -468,7 +468,7 @@ def send(html_body: str):
     to   = [x.strip() for x in os.environ["EMAIL_TO"].split(",")]
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Daily arXiv Fetch – made by Zhambur · Embodied AI · Multimodal LLM"
+    msg["Subject"] = "Daily arXiv Fetch – made by Zhambur"
     msg["From"] = user
     msg["To"] = ", ".join(to)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
