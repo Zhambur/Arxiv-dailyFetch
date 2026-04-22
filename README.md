@@ -52,7 +52,7 @@ python fetch.py
 
 ### 4. GitHub Actions 定时运行
 
-请确保已经 fork 或本地推送该 repo 到您的账户。在 GitHub 仓库 Settings → Secrets and variables → Actions 中，点击 New repository secret 配置以下 Secrets：
+请确保已经 fork 或本地推送该 repo 到您的账户, 并已经开启SMTP服务（见2：邮箱配置）。在 GitHub 仓库 Settings → Secrets and variables → Actions 中，点击 New repository secret 配置以下 Secrets：
 
 | Secret | 说明 |
 |--------|------|
