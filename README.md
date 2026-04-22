@@ -6,17 +6,22 @@
 
 默认设定检索关键词，覆盖**具身智能**、**多模态大模型**、**世界模型 & 规划**、**图像生成 & 理解**、**AI Agent** 五个模块。其中具身智能每批次抓取 20 篇，其余模块各 10 篇。
 
+篇数、追踪领域、ai摘要风格等均可自行调整，请将代码拉取到本地，并修改`fetch.py`，详细修改方法见代码注释。
+
 ## 快速开始
+
+> 若无本地（如测试、修改代码）需求，请直接见步骤4。
 
 ### 1. 克隆 & 安装依赖
 
 ```bash
+git clone <web URL>
 pip install -r requirements.txt
 ```
 
 ### 2. 配置环境变量
 
-> 若没有本地启动脚本（如测试）的需求，可以跳过本步骤，直接在 Actions 中配置 Secrets。若有该需求，在推送至远程仓库时，注意将该文件添加至 `.gitignore` 中，避免泄露隐私信息。
+> 若有该需求，在推送至远程仓库时，注意将该文件添加至 `.gitignore` 中，避免泄露隐私信息。
 
 创建 `.env` 文件：
 
@@ -39,13 +44,15 @@ GEMINI_API_KEY=    # https://aistudio.google.com/apikey
 
 ### 3. 本地运行
 
+> 该步骤可以测试任务是否正常完成。
+
 ```bash
 python fetch.py
 ```
 
 ### 4. GitHub Actions 定时运行
 
-在 GitHub 仓库 Settings → Secrets and variables → Actions 中配置以下 Secrets：
+请确保已经 fork 或本地推送该 repo 到您的账户。在 GitHub 仓库 Settings → Secrets and variables → Actions 中，点击 New repository secret 配置以下 Secrets：
 
 | Secret | 说明 |
 |--------|------|

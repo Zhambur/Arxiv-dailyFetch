@@ -11,7 +11,7 @@ import requests, feedparser
 from dotenv import load_dotenv
 load_dotenv()
 
-# ---------------------- 全局限速器 ---------------------- #
+# ---------------------- 全局限速器，避免被arxiv api封禁 ---------------------- #
 _rate_lock = threading.Lock()
 _last_request_time = 0.0
 MIN_INTERVAL = 32  # 秒，最少等这么久才发下一条（arXiv 每分钟最多 3 条，取 32s 留余量）
@@ -31,6 +31,7 @@ def _rate_limited_get(session: requests.Session, url: str, timeout: int) -> requ
 # ---------------------- 多 AI 摘要（支持多个提供商自动切换） ---------------------- #
 _ai_provider = None
 
+# 该位置可修改ai翻译摘要的风格，也可以添加其他ai提供商
 
 def _build_providers():
     """
@@ -85,7 +86,7 @@ def _build_providers():
 
         providers.append(("DeepSeek (deepseek-chat)", deepseek_summary))
 
-    # 3. Gemini（最后兜底）
+    # 3. Gemini
     try:
         from google import genai
         gemini_key = os.getenv("GEMINI_API_KEY")
@@ -130,6 +131,7 @@ def _ai_summary(title_en: str, abs_en: str) -> str:
 
 
 # ----------------------------------------------------------- #
+# 这里可以修改抓取论文的api源
 
 ARXIV_API = (
     "https://export.arxiv.org/api/query"
@@ -158,6 +160,7 @@ def _http_get(url: str) -> str:
             time.sleep(wait)
     raise RuntimeError("Failed after retries")
 
+# 这里可以修改抓取论文的篇数和时间范围
 
 def fetch(query: str, hours: int = 24, max_results: int = 10) -> List[dict]:
     since_utc = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -523,6 +526,7 @@ def main():
         print("[warn] Gemini API 未配置，跳过 AI 摘要（请确认 GEMINI_API_KEY 环境变量已设置）")
     sections = {}
     for name, query in _MODULES:
+    # 这里做了特殊处理，对核心领域抓取更多篇数。如有其他需求，可自行修改
         n = 20 if name == "具身智能" else 10
         print(f"[*] Fetching — {name} (max={n}) …")
         sections[name] = fetch(query, max_results=n)
