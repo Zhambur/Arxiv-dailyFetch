@@ -1,8 +1,9 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: Arxiv-dailyFetch
 
 on:
   schedule:
-    - cron: '0 0 * * *'    # UTC 00:00 = 北京时间 08:00
+    - cron: '30 23 * * *'  # UTC 22:30 = 北京时间 06:30（早间推送）
   workflow_dispatch:       # 允许手动触发
 
 jobs:
