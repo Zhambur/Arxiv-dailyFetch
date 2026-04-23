@@ -67,7 +67,7 @@ python fetch.py
 
 如有其他apikey需求，请自行在代码中修改，并创建对应的secret。
 
-定时任务在每天 **UTC 15:30（北京时间 23:30）** 自动执行，若需要调整时间，请在`.github\workflows\daily.yml`中修改。注意通常存在 2-3 个小时的误差，这可能是 Actions 自带的发送时间偏差，也可能是 SMTP 服务的延迟。
+定时任务在每天 **UTC 23:30（北京时间 07:30）** 自动执行，若需要调整时间，请在`.github\workflows\daily.yml`中修改。注意通常存在 2-3 个小时的误差，这可能是 Actions 自带的发送时间偏差，也可能是 SMTP 服务的延迟。
 
 ## 依赖
 
