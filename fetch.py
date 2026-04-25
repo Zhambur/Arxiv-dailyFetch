@@ -545,7 +545,19 @@ def build_email(sections: dict) -> str:
     .section-count {{ background: rgba(74,144,217,0.15); }}
     .paper-meta {{ color: #aaa; }}
     .masthead {{ background: #0f3460; }}
+    .no-papers {{ background: #16213e; color: #aaa; }}
   }}
+  .no-papers {{
+    text-align: center;
+    padding: 48px 24px;
+    background: #fff;
+    border-radius: 12px;
+    color: #666;
+    margin-bottom: 24px;
+  }}
+  .no-papers-icon {{ font-size: 40px; margin-bottom: 12px; }}
+  .no-papers-title {{ font-size: 18px; font-weight: 600; color: #1a1a2e; margin-bottom: 8px; }}
+  .no-papers-sub {{ font-size: 14px; }}
 </style>
 </head>
 <body>
@@ -555,7 +567,12 @@ def build_email(sections: dict) -> str:
     <div class="subtitle">更新时间：{now_bj} (北京时间)</div>
     <div class="ai-badge">{_ai_provider or "Gemini 2.0 Flash"}</div>
   </div>
-  {''.join(section_html(k, k, v) for k, v in sections.items())}
+  {''.join(section_html(k, k, v) for k, v in sections.items()) if sections else f'''
+  <div class="no-papers">
+    <div class="no-papers-icon">📭</div>
+    <div class="no-papers-title">今日无更新</div>
+    <div class="no-papers-sub">过去 24 小时内各分类均无新论文，或 AI 过滤后无有效结果。<br>arXiv 在周末和节假日更新量较少属正常现象。</div>
+  </div>'''}
   <div class="footer">made by Zhambur</div>
 </div>
 </body>
@@ -630,16 +647,15 @@ def main():
         n = 30 if name == "具身智能" else 15
         print(f"[*] Fetching — {name} (max={n}) …")
         raw = fetch(query, max_results=n)
+        print(f"    → 抓取原始论文 {len(raw)} 篇")
         papers = _ai_filter_relevant(raw, category=name)
+        print(f"    → AI 过滤后剩余 {len(papers)} 篇")
         if not papers:
             print(f"[warn] {name} 过滤后无剩余论文，跳过该模块")
             continue
         sections[name] = papers
 
-    if not sections:
-        print("[Error] 所有模块均无有效论文，邮件未发送。")
-        return
-
+    print(f"[*] 共 {len(sections)} 个模块有有效论文")
     send(build_email(sections))
 
 
