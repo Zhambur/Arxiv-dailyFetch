@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os, ssl, smtplib, socket, time, html, threading
+import json, os, ssl, smtplib, socket, time, html, threading
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -10,6 +10,40 @@ from typing import List
 import requests, feedparser
 from dotenv import load_dotenv
 load_dotenv()
+
+# ---------------------- State 文件：记录上次抓取时间戳 -------------------------- #
+# 使用 ~/.arxiv_daily_state.json 持久化，支持增量抓取（避免重复论文）
+_STATE_FILE = os.path.join(os.path.expanduser("~"), ".arxiv_daily_state.json")
+
+
+def _read_state() -> dict:
+    try:
+        with open(_STATE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _write_state(data: dict):
+    try:
+        with open(_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[warn] 无法写入 state 文件: {e}")
+
+
+def _get_since_date() -> str:
+    """
+    读取 state，返回上一次成功抓取的最新日期（YYYY-MM-DD）。
+    若无记录，返回昨天（确保至少抓到一批，避免首次空跑）。
+    """
+    state = _read_state()
+    last = state.get("last_run_date", "")
+    if last:
+        return last
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+    return yesterday
+
 
 # ---------------------- 全局限速器，避免被arxiv api封禁 ---------------------- #
 _rate_lock = threading.Lock()
@@ -256,8 +290,20 @@ def _http_get(url: str) -> str:
 
 # 这里可以修改抓取论文的篇数和时间范围
 
-def fetch(query: str, hours: int = 24, max_results: int = 10) -> List[dict]:
-    since_utc = datetime.now(timezone.utc) - timedelta(hours=hours)
+def fetch(query: str, hours: int = 24, max_results: int = 10, since_date: str = None) -> List[dict]:
+    """
+    从 arXiv API 获取论文，支持两种过滤方式：
+      - hours:      过去 N 小时内提交的（兼容旧逻辑）
+      - since_date: ISO 字符串（如 2026-04-27），只取该日期之后（含）的论文。
+                   优先级高于 hours。
+    """
+    if since_date:
+        # 精确到天，取当天 00:00 UTC 作为起始点
+        since_utc = datetime.fromisoformat(since_date).replace(
+            hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc
+        )
+    else:
+        since_utc = datetime.now(timezone.utc) - timedelta(hours=hours)
     url = f"https://export.arxiv.org/api/query?search_query={query}&sortBy=submittedDate&sortOrder=descending&max_results={max_results}"
     raw = _http_get(url)
     feed = feedparser.parse(raw)
@@ -277,12 +323,90 @@ def fetch(query: str, hours: int = 24, max_results: int = 10) -> List[dict]:
             "abs_en":    summ_en,
         })
     if not out:
-        print("[Warning] No new papers found in the last 24 hours.")
+        marker = since_date if since_date else "24 hours"
+        print(f"[Warning] No new papers since {marker}.")
     else:
         print(f"\t → {len(out)} papers")
     return out
 
-# ---------- 响应式 HTML 生成 --------------------------------------------------- #
+
+# ---------- 全局去重 --------------------------------------------------------- #
+# 在 main() 开始时初始化，模块抓完后逐个去重，保证同一篇论文不会在多个分类出现
+_seen_titles: set = set()
+
+
+def _normalize_title(title: str) -> str:
+    """将标题转小写、去除空格和常见连词，作为去重 key。"""
+    return "".join(title.lower().split())
+
+
+def _dedup(papers: List[dict]) -> tuple[List[dict], int]:
+    """
+    基于标题去重，返回 (去重后列表, 被过滤数量)。
+    调用一次后，同一论文不会出现在后续模块中。
+    """
+    before = len(papers)
+    unique = []
+    for p in papers:
+        key = _normalize_title(p["title_en"])
+        if key not in _seen_titles:
+            _seen_titles.add(key)
+            unique.append(p)
+    dropped = before - len(unique)
+    if dropped:
+        print(f"\t   (去重过滤 {dropped} 篇)")
+    return unique, dropped
+
+
+# ---------- HuggingFace Daily Papers --------------------------------------- #
+def fetch_hf_daily_papers(max_results: int = 15) -> List[dict]:
+    """
+    从 HuggingFace /api/daily_papers 获取当日精选论文。
+    不传 date 参数时，HF 自动返回最新一期（与 last_run_date 无关，
+    保证每次都能抓到最新数据）。
+    这些论文不一定在 arXiv 上，部分来自其他平台（如技术报告等）。
+    """
+    url = f"https://huggingface.co/api/daily_papers?limit={max_results}"
+    try:
+        r = requests.get(url, timeout=60,
+                         headers={"User-Agent": "arxiv-digest/1.0 (personal research tool)"})
+        r.raise_for_status()
+        papers = r.json()
+    except Exception as e:
+        print(f"[warn] HuggingFace daily papers 获取失败: {e}")
+        return []
+
+    out = []
+    for p in papers:
+        # 嵌套结构：paper 对象里才有 authors/summary/url
+        paper_obj   = p.get("paper", {})
+        paper_id    = paper_obj.get("id", "")
+        # 有些论文的 url 可能在顶层；没有的话用 paper id 拼接
+        paper_url   = p.get("url") or (
+            f"https://arxiv.org/abs/{paper_id}" if paper_id.startswith(("cs.", "stat.", "math.", "phys.", "q-bio", "q-fin", "nlin", "econ.")) else ""
+        )
+        # authors 可能在 paper.authors（列表）或 paper.authors[i].name
+        raw_authors = paper_obj.get("authors", [])
+        if raw_authors and isinstance(raw_authors[0], dict):
+            author_names = [a.get("name", "") for a in raw_authors]
+        else:
+            author_names = raw_authors
+        # 摘要取顶层 summary（优先），或 paper.summary
+        abs_en = p.get("summary") or paper_obj.get("summary", "")
+
+        out.append({
+            "title_en":  p.get("title", ""),
+            "title_zh":  p.get("title", ""),
+            "url":       paper_url,
+            "authors":   ", ".join(author_names),
+            "abs_ai":    "",
+            "abs_en":    abs_en,
+        })
+    print(f"\t → HF 精选 {len(out)} 篇")
+    return out
+
+
+
 _META = """
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -641,21 +765,57 @@ _MODULES = [
 def main():
     if not _providers:
         print("[warn] 未检测到任何 AI API Key，AI 摘要功能已禁用")
+
+    # 增量模式：从 state 读取上次抓取日期，避免重复论文
+    since_date = _get_since_date()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    print(f"[*] 增量抓取 since {since_date}（今日 {today}）\n")
+
+    # 全局去重初始化
+    global _seen_titles
+    _seen_titles = set()
+
     sections = {}
+
+    # ---------- arXiv 各模块 ----------
     for name, query in _MODULES:
-        # 具身智能 30 篇，其余 15 篇，留足余量给 AI 过滤器淘汰
         n = 30 if name == "具身智能" else 15
-        print(f"[*] Fetching — {name} (max={n}) …")
-        raw = fetch(query, max_results=n)
-        print(f"    → 抓取原始论文 {len(raw)} 篇")
+        print(f"[*] Fetching arXiv — {name} (max={n}) …")
+        raw = fetch(query, max_results=n, since_date=since_date)
+        print(f"    → 原始论文 {len(raw)} 篇")
+
         papers = _ai_filter_relevant(raw, category=name)
-        print(f"    → AI 过滤后剩余 {len(papers)} 篇")
+        print(f"    → AI 过滤后 {len(papers)} 篇")
+
+        # 全局去重（同一篇论文不会在多个分类出现）
+        papers, dropped = _dedup(papers)
+        if dropped:
+            print(f"    → 全局去重后 {len(papers)} 篇")
+
         if not papers:
             print(f"[warn] {name} 过滤后无剩余论文，跳过该模块")
             continue
         sections[name] = papers
 
-    print(f"[*] 共 {len(sections)} 个模块有有效论文")
+    # ---------- HuggingFace 精选 ----------
+    hf_name = "HuggingFace 精选"
+    print(f"\n[*] Fetching HuggingFace daily papers …")
+    hf_raw = fetch_hf_daily_papers(max_results=15)
+    if hf_raw:
+        hf_papers, hf_dropped = _dedup(hf_raw)
+        if hf_dropped:
+            print(f"    → 全局去重后 {len(hf_papers)} 篇")
+        # 与 arXiv 论文统一走 AI 过滤器：生成 abs_ai 中文摘要
+        hf_filtered = _ai_filter_relevant(hf_papers, category=hf_name)
+        if hf_filtered:
+            sections[hf_name] = hf_filtered
+
+    print(f"\n[*] 共 {len(sections)} 个模块有有效论文")
+
+    # 更新 state（无论有无论文都更新，保证下次增量正确）
+    _write_state({"last_run_date": today})
+    print(f"[*] State 已更新：last_run_date = {today}")
+
     send(build_email(sections))
 
 
