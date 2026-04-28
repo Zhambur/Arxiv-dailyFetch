@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import json, os, ssl, smtplib, socket, time, html, threading
+import json, os, ssl, smtplib, socket, time, html, threading, urllib.parse
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -32,17 +32,19 @@ def _write_state(data: dict):
         print(f"[warn] 无法写入 state 文件: {e}")
 
 
-def _get_since_date() -> str:
+def _get_since_dt() -> datetime:
     """
-    读取 state，返回上一次成功抓取的最新日期（YYYY-MM-DD）。
-    若无记录，返回昨天（确保至少抓到一批，避免首次空跑）。
+    读取 state，返回上一次成功抓取的时间（UTC datetime）。
+    若无记录，返回 24 小时前（确保首次至少有论文可抓）。
     """
     state = _read_state()
-    last = state.get("last_run_date", "")
+    last = state.get("last_run_dt", "")
     if last:
-        return last
-    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
-    return yesterday
+        try:
+            return datetime.fromisoformat(last)
+        except ValueError:
+            pass
+    return datetime.now(timezone.utc) - timedelta(hours=24)
 
 
 # ---------------------- 全局限速器，避免被arxiv api封禁 ---------------------- #
@@ -290,21 +292,17 @@ def _http_get(url: str) -> str:
 
 # 这里可以修改抓取论文的篇数和时间范围
 
-def fetch(query: str, hours: int = 24, max_results: int = 10, since_date: str = None) -> List[dict]:
+def fetch(query: str, hours: int = 24, max_results: int = 10, since_dt: datetime = None) -> List[dict]:
     """
     从 arXiv API 获取论文，支持两种过滤方式：
-      - hours:      过去 N 小时内提交的（兼容旧逻辑）
-      - since_date: ISO 字符串（如 2026-04-27），只取该日期之后（含）的论文。
-                   优先级高于 hours。
+      - hours:     过去 N 小时内提交的（兼容旧逻辑）
+      - since_dt:  该时刻之后（含）的论文。优先级高于 hours。
     """
-    if since_date:
-        # 精确到天，取当天 00:00 UTC 作为起始点
-        since_utc = datetime.fromisoformat(since_date).replace(
-            hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc
-        )
+    if since_dt:
+        since_utc = since_dt
     else:
         since_utc = datetime.now(timezone.utc) - timedelta(hours=hours)
-    url = f"https://export.arxiv.org/api/query?search_query={query}&sortBy=submittedDate&sortOrder=descending&max_results={max_results}"
+    url = f"https://export.arxiv.org/api/query?search_query={urllib.parse.quote(query,safe='')}&sortBy=submittedDate&sortOrder=descending&max_results={max_results}"
     raw = _http_get(url)
     feed = feedparser.parse(raw)
     out = []
@@ -323,7 +321,7 @@ def fetch(query: str, hours: int = 24, max_results: int = 10, since_date: str = 
             "abs_en":    summ_en,
         })
     if not out:
-        marker = since_date if since_date else "24 hours"
+        marker = since_dt.strftime("%Y-%m-%d %H:%M UTC") if since_dt else "24 hours"
         print(f"[Warning] No new papers since {marker}.")
     else:
         print(f"\t → {len(out)} papers")
@@ -766,10 +764,10 @@ def main():
     if not _providers:
         print("[warn] 未检测到任何 AI API Key，AI 摘要功能已禁用")
 
-    # 增量模式：从 state 读取上次抓取日期，避免重复论文
-    since_date = _get_since_date()
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    print(f"[*] 增量抓取 since {since_date}（今日 {today}）\n")
+    # 增量模式：从 state 读取上次抓取时间，避免重复论文
+    since_dt = _get_since_dt()
+    now_utc = datetime.now(timezone.utc)
+    print(f"[*] 增量抓取 since {since_dt.strftime('%Y-%m-%d %H:%M')} UTC（当前 {now_utc.strftime('%Y-%m-%d %H:%M')} UTC）\n")
 
     # 全局去重初始化
     global _seen_titles
@@ -781,7 +779,7 @@ def main():
     for name, query in _MODULES:
         n = 30 if name == "具身智能" else 15
         print(f"[*] Fetching arXiv — {name} (max={n}) …")
-        raw = fetch(query, max_results=n, since_date=since_date)
+        raw = fetch(query, max_results=n, since_dt=since_dt)
         print(f"    → 原始论文 {len(raw)} 篇")
 
         papers = _ai_filter_relevant(raw, category=name)
@@ -812,9 +810,9 @@ def main():
 
     print(f"\n[*] 共 {len(sections)} 个模块有有效论文")
 
-    # 更新 state（无论有无论文都更新，保证下次增量正确）
-    _write_state({"last_run_date": today})
-    print(f"[*] State 已更新：last_run_date = {today}")
+    # 更新 state（保存当前 UTC 时间，保证下次增量精确到秒）
+    _write_state({"last_run_dt": now_utc.isoformat()})
+    print(f"[*] State 已更新：last_run_dt = {now_utc.isoformat()}")
 
     send(build_email(sections))
 
